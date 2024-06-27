@@ -1557,6 +1557,52 @@ SDL_Surface *SDL_DisplayFormatAlpha(SDL_Surface *surface)
 /*
  * Update a specific portion of the physical screen
  */
+
+
+void FlipSurfaceVertical(SDL_Surface *surface) {
+    int pitch = surface->pitch;
+    char *temp = (char *)malloc(pitch);
+    if (!temp) return;
+
+    char *pixels = (char *)surface->pixels;
+    for (int y = 0; y < surface->h / 2; ++y) {
+        char *top = pixels + y * pitch;
+        char *bottom = pixels + (surface->h - y - 1) * pitch;
+
+        /* Swap the top and bottom lines */
+        memcpy(temp, top, pitch);
+        memcpy(top, bottom, pitch);
+        memcpy(bottom, temp, pitch);
+    }
+    free(temp);
+}
+
+void FlipSurfaceHorizontal(SDL_Surface *surface) {
+    int pitch = surface->pitch;
+    int bytesPerPixel = surface->format->BytesPerPixel;
+    char *temp = (char *)malloc(bytesPerPixel);
+    if (!temp) return;
+
+    char *pixels = (char *)surface->pixels;
+    for (int y = 0; y < surface->h; ++y) {
+        char *row = pixels + y * pitch;
+        for (int x = 0; x < surface->w / 2; ++x) {
+            char *left = row + x * bytesPerPixel;
+            char *right = row + (surface->w - x - 1) * bytesPerPixel;
+
+            /* Swap the left and right pixels */
+            memcpy(temp, left, bytesPerPixel);
+            memcpy(left, right, bytesPerPixel);
+            memcpy(right, temp, bytesPerPixel);
+        }
+    }
+    free(temp);
+}
+
+
+
+
+
 void SDL_UpdateRect(SDL_Surface *screen, Sint32 x, Sint32 y, Uint32 w, Uint32 h)
 {	
 	if ( screen ) {
@@ -1595,70 +1641,72 @@ void SDL_UpdateRect(SDL_Surface *screen, Sint32 x, Sint32 y, Uint32 w, Uint32 h)
 		}
 	}
 }
-void SDL_UpdateRects (SDL_Surface *screen, int numrects, SDL_Rect *rects)
-{
-	int i;
-	SDL_VideoDevice *video = current_video;
-	SDL_VideoDevice *this = current_video;
+void SDL_UpdateRects(SDL_Surface *screen, int numrects, SDL_Rect *rects) {
+    int i;
+    SDL_VideoDevice *video = current_video;
+    SDL_VideoDevice *this = current_video;
 
-	if ( (screen->flags & (SDL_OPENGL | SDL_OPENGLBLIT)) == SDL_OPENGL ) {
-		SDL_SetError("OpenGL active, use SDL_GL_SwapBuffers()");
-		return;
-	}
-	if ( screen == SDL_ShadowSurface ) {
-		/* Blit the shadow surface using saved mapping */
-		SDL_Palette *pal = screen->format->palette;
-		SDL_Color *saved_colors = NULL;
-		if ( pal && !(SDL_VideoSurface->flags & SDL_HWPALETTE) ) {
-			/* simulated 8bpp, use correct physical palette */
-			saved_colors = pal->colors;
-			if ( video->gammacols ) {
-				/* gamma-corrected palette */
-				pal->colors = video->gammacols;
-			} else if ( video->physpal ) {
-				/* physical palette different from logical */
-				pal->colors = video->physpal->colors;
-			}
-		}
-		if ( SHOULD_DRAWCURSOR(SDL_cursorstate) ) {
-			SDL_LockCursor();
-			SDL_DrawCursor(SDL_ShadowSurface);
-			for ( i=0; i<numrects; ++i ) {
-				SDL_LowerBlit(SDL_ShadowSurface, &rects[i], 
-						SDL_VideoSurface, &rects[i]);
-			}
-			SDL_EraseCursor(SDL_ShadowSurface);
-			SDL_UnlockCursor();
-		} else {
-			for ( i=0; i<numrects; ++i ) {
-				SDL_LowerBlit(SDL_ShadowSurface, &rects[i], 
-						SDL_VideoSurface, &rects[i]);
-			}
-		}
-		if ( saved_colors ) {
-			pal->colors = saved_colors;
-		}
+    if ((screen->flags & (SDL_OPENGL | SDL_OPENGLBLIT)) == SDL_OPENGL) {
+        SDL_SetError("OpenGL active, use SDL_GL_SwapBuffers()");
+        return;
+    }
+    if (screen == SDL_ShadowSurface) {
+        /* Blit the shadow surface using saved mapping */
+        SDL_Palette *pal = screen->format->palette;
+        SDL_Color *saved_colors = NULL;
+        if (pal && !(SDL_VideoSurface->flags & SDL_HWPALETTE)) {
+            /* simulated 8bpp, use correct physical palette */
+            saved_colors = pal->colors;
+            if (video->gammacols) {
+                /* gamma-corrected palette */
+                pal->colors = video->gammacols;
+            } else if (video->physpal) {
+                /* physical palette different from logical */
+                pal->colors = video->physpal->colors;
+            }
+        }
+        if (SHOULD_DRAWCURSOR(SDL_cursorstate)) {
+            SDL_LockCursor();
+            SDL_DrawCursor(SDL_ShadowSurface);
+            for (i = 0; i < numrects; ++i) {
+                SDL_LowerBlit(SDL_ShadowSurface, &rects[i], SDL_VideoSurface, &rects[i]);
+            }
+            SDL_EraseCursor(SDL_ShadowSurface);
+            SDL_UnlockCursor();
+        } else {
+            for (i = 0; i < numrects; ++i) {
+                SDL_LowerBlit(SDL_ShadowSurface, &rects[i], SDL_VideoSurface, &rects[i]);
+            }
+        }
+        if (saved_colors) {
+            pal->colors = saved_colors;
+        }
 
-		/* Fall through to video surface update */
-		screen = SDL_VideoSurface;
-	}
-	if ( screen == SDL_VideoSurface ) {
-		/* Update the video surface */
-		if ( screen->offset ) {
-			for ( i=0; i<numrects; ++i ) {
-				rects[i].x += video->offset_x;
-				rects[i].y += video->offset_y;
-			}
-			video->UpdateRects(this, numrects, rects);
-			for ( i=0; i<numrects; ++i ) {
-				rects[i].x -= video->offset_x;
-				rects[i].y -= video->offset_y;
-			}
-		} else {
-			video->UpdateRects(this, numrects, rects);
-		}
-	}
+        /* Fall through to video surface update */
+        screen = SDL_VideoSurface;
+    }
+    if (screen == SDL_VideoSurface) {
+        /* Flip the surface before updating */
+        FlipSurfaceVertical(screen);
+        FlipSurfaceHorizontal(screen);
+
+        /* Update the video surface */
+        if (screen->offset) {
+            for (i = 0; i < numrects; ++i) {
+                rects[i].x += video->offset_x;
+                rects[i].y += video->offset_y;
+            }
+            video->UpdateRects(this, numrects, rects);
+            for (i = 0; i < numrects; ++i) {
+                rects[i].x -= video->offset_x;
+                rects[i].y -= video->offset_y;
+            }
+        } else {
+            video->UpdateRects(this, numrects, rects);
+        }
+    }
 }
+
 
 /*
  * Performs hardware double buffering, if possible, or a full update if not.
